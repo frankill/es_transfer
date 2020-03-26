@@ -11,4 +11,8 @@
 
 # Copy source index mapping only, do not import data
 ./es_transfer -fi="source ip" -ti="dest ip" -num=-99
+
+# Single shard copy 3000 ，No data will be copied if -num is less than - bnum
+./es_transfer -fi="source ip" -ti="dest ip" -num=3000
+
 ```
