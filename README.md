@@ -1,8 +1,8 @@
 # es_transfer
-```sh```
+```sh
 # Copy all source data + map to destination
 ./es_transfer -fi="source ip" -ti="dest ip" 
-```sh```
+
 # Do not use source index mapping
 ./es_transfer -fi="source ip" -ti="dest ip" -km=true
 
@@ -11,4 +11,4 @@
 
 # Copy source index mapping only, do not import data
 ./es_transfer -fi="source ip" -ti="dest ip" -num=-99
-
+```
