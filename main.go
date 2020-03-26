@@ -14,14 +14,14 @@ import (
 )
 
 var (
-	fromUser     string
-	fromPwd      string
-	toUser       string
-	toPwd        string
-	fromIP       string
-	fromPort     int64
-	toIP         string
-	toPort       int64
+	sourceUser     string
+	sourcePwd      string
+	destUser       string
+	destPwd        string
+	sourceIP       string
+	sourcePort     int64
+	destIP         string
+	destPort       int64
 	indexL       string
 	keepTime     string
 	numberShards float64
@@ -39,15 +39,15 @@ func main() {
 func NewDB() *db {
 	c := new(db)
 
-	c.fromCL, c.err = newCL(fromIP, fromPort, fromUser, fromPwd)
+	c.sourceCL, c.err = newCL(sourceIP, sourcePort, sourceUser, sourcePwd)
 	if c.err != nil {
-		c.err = errors.New(fromIP + " : " + c.err.Error())
+		c.err = errors.New(sourceIP + " : " + c.err.Error())
 		return c
 	}
 
-	c.toCL, c.err = newCL(toIP, toPort, toUser, toPwd)
+	c.toCL, c.err = newCL(destIP, destPort, destUser, destPwd)
 	if c.err != nil {
-		c.err = errors.New(fromIP + " : " + c.err.Error())
+		c.err = errors.New(sourceIP + " : " + c.err.Error())
 		return c
 	}
 
@@ -56,7 +56,7 @@ func NewDB() *db {
 	var fwg sync.WaitGroup
 	var twg sync.WaitGroup
 
-	c.fromWG = &fwg
+	c.sourceWG = &fwg
 	c.toWG = &twg
 	return c
 
@@ -73,14 +73,14 @@ func newCL(ip string, port int64, user, pwd string) (*elastic.Client, error) {
 }
 
 type db struct {
-	fromCL    *elastic.Client
+	sourceCL    *elastic.Client
 	toCL      *elastic.Client
 	indexNmae string
 	shard     int
 	err       error
 	ctx       context.Context
 	result    chan []*elastic.SearchHit
-	fromWG    *sync.WaitGroup
+	sourceWG    *sync.WaitGroup
 	toWG      *sync.WaitGroup
 }
 
@@ -110,19 +110,19 @@ func (d *db) Do() {
 }
 
 func (d *db) sliceQuery(num int) *elastic.ScrollService {
-	return d.fromCL.Scroll(d.indexNmae).KeepAlive(keepTime).
+	return d.sourceCL.Scroll(d.indexNmae).KeepAlive(keepTime).
 		Slice(elastic.NewSliceQuery().Id(num).Max(d.shard)).
 		Size(int(bulkNum))
 }
 
 func (d *db) query() *elastic.ScrollService {
-	return d.fromCL.Scroll(d.indexNmae).
+	return d.sourceCL.Scroll(d.indexNmae).
 		KeepAlive(keepTime).Size(int(bulkNum))
 }
 
 func (d *db) sliceData(num int) {
 
-	defer d.fromWG.Done()
+	defer d.sourceWG.Done()
 	var ids string
 	var svc *elastic.ScrollService
 
@@ -166,7 +166,7 @@ func (d *db) sliceData(num int) {
 	}
 
 	if ids != "" {
-		_, err := elastic.NewClearScrollService(d.fromCL).ScrollId(ids).Do(d.ctx)
+		_, err := elastic.NewClearScrollService(d.sourceCL).ScrollId(ids).Do(d.ctx)
 		if err != nil {
 			log.Println(err)
 		}
@@ -235,11 +235,11 @@ func (d *db) data() {
 	}
 
 	for i := 0; i < d.shard; i++ {
-		d.fromWG.Add(1)
+		d.sourceWG.Add(1)
 		go d.sliceData(i)
 	}
 
-	d.fromWG.Wait()
+	d.sourceWG.Wait()
 	close(d.result)
 	d.toWG.Wait()
 
@@ -280,7 +280,7 @@ func (d *db) mapping() *db {
 		return d
 	}
 
-	mapping, err := d.fromCL.GetMapping().Index(d.indexNmae).Do(d.ctx)
+	mapping, err := d.sourceCL.GetMapping().Index(d.indexNmae).Do(d.ctx)
 	if err != nil {
 		d.err = err
 		return d
@@ -319,7 +319,7 @@ func (d *db) indexList() []string {
 		return strings.Split(indexL, ",")
 	}
 
-	res, err := d.fromCL.CatIndices().Do(d.ctx)
+	res, err := d.sourceCL.CatIndices().Do(d.ctx)
 	if err != nil {
 		d.err = err
 		return nil
@@ -337,7 +337,7 @@ func (d *db) shards() *db {
 	if d.err != nil {
 		return d
 	}
-	slice, err := d.fromCL.IndexGetSettings(d.indexNmae).Do(d.ctx)
+	slice, err := d.sourceCL.IndexGetSettings(d.indexNmae).Do(d.ctx)
 	if err != nil {
 		d.err = err
 		return d
@@ -359,14 +359,14 @@ func init() {
 	flag.BoolVar(&keepMapping, "km", false, "Whether the original index map is not retained")
 	flag.Float64Var(&numberShards, "mul", 1.0, "number shards multiple")
 	flag.StringVar(&keepTime, "kt", "6s", "Read the data retention time of es ")
-	flag.Int64Var(&fromPort, "fp", 9200, "es port")
-	flag.StringVar(&fromIP, "fi", "", "es ip ")
-	flag.Int64Var(&toPort, "tp", 9200, "es port")
-	flag.StringVar(&toIP, "ti", "", " es ip")
-	flag.StringVar(&fromUser, "fu", "", " user name")
-	flag.StringVar(&fromPwd, "fpwd", "", " pwd")
-	flag.StringVar(&toUser, "tu", "", " user name")
-	flag.StringVar(&toPwd, "tpwd", "", " pwd")
+	flag.Int64Var(&sourcePort, "fp", 9200, "es port")
+	flag.StringVar(&sourceIP, "fi", "", "es ip ")
+	flag.Int64Var(&destPort, "tp", 9200, "es port")
+	flag.StringVar(&destIP, "ti", "", " es ip")
+	flag.StringVar(&sourceUser, "fu", "", " user name")
+	flag.StringVar(&sourcePwd, "fpwd", "", " pwd")
+	flag.StringVar(&destUser, "tu", "", " user name")
+	flag.StringVar(&destPwd, "tpwd", "", " pwd")
 	flag.StringVar(&indexL, "i", "", "index name list a,b")
 	flag.StringVar(&otype, "o", "index", "Resolution of _id conflict: index coverage; The create skip")
 	flag.Parse()
