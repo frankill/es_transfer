@@ -27,13 +27,13 @@ PUT _ingest/pipeline/test1
   "processors": [
     {
       "drop": {
-        "if": " ctx?.openid == null "
+        "if": " ctx?.tags == null "
       }
     },
     {
       "set": {
         "field": "_index",
-        "value": "test_{{openid}}"
+        "value": "test_{{tags}}"
       }
     }
   ]
