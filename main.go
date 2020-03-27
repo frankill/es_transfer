@@ -46,7 +46,7 @@ func NewDB() *db {
 		return c
 	}
 
-	c.toCL, c.err = newCL(destIP, destPort, destUser, destPwd)
+	c.destCL, c.err = newCL(destIP, destPort, destUser, destPwd)
 	if c.err != nil {
 		c.err = errors.New(sourceIP + " : " + c.err.Error())
 		return c
@@ -75,7 +75,7 @@ func newCL(ip string, port int64, user, pwd string) (*elastic.Client, error) {
 
 type db struct {
 	sourceCL  *elastic.Client
-	toCL      *elastic.Client
+	destCL    *elastic.Client
 	indexNmae string
 	shard     int
 	err       error
@@ -192,7 +192,7 @@ func (d *db) slicePostData() {
 			if !ok {
 				return
 			}
-			bulkRequest := d.toCL.Bulk()
+			bulkRequest := d.destCL.Bulk()
 			esRequest := make([]elastic.BulkableRequest, 0, putNum)
 			num := int64(0)
 
@@ -252,7 +252,7 @@ func (d *db) data() {
 
 func (d *db) createIndex() {
 
-	node, err := elastic.NewNodesInfoService(d.toCL).Do(d.ctx)
+	node, err := elastic.NewNodesInfoService(d.destCL).Do(d.ctx)
 	if err != nil {
 		d.err = err
 		return
@@ -265,7 +265,7 @@ func (d *db) createIndex() {
 	tmp := make(map[string]interface{})
 	tmp["settings"] = body
 
-	_, err = d.toCL.CreateIndex(d.indexNmae).BodyJson(tmp).Do(d.ctx)
+	_, err = d.destCL.CreateIndex(d.indexNmae).BodyJson(tmp).Do(d.ctx)
 
 	if err != nil {
 		d.err = err
@@ -286,7 +286,7 @@ func (d *db) mapping() *db {
 		d.err = err
 		return d
 	}
-	ok, err := d.toCL.IndexExists(d.indexNmae).Do(d.ctx)
+	ok, err := d.destCL.IndexExists(d.indexNmae).Do(d.ctx)
 	if err != nil {
 		d.err = err
 		return d
@@ -300,7 +300,7 @@ func (d *db) mapping() *db {
 		return d
 	}
 
-	_, err = d.toCL.PutMapping().Index(d.indexNmae).
+	_, err = d.destCL.PutMapping().Index(d.indexNmae).
 		BodyJson(mapping[d.indexNmae].(map[string]interface{})["mappings"].(map[string]interface{})).Do(d.ctx)
 	if err != nil {
 		d.err = err
