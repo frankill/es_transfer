@@ -15,4 +15,27 @@
 # Single shard copy 3000 ，No data will be copied if -num is less than - bnum
 ./es_transfer -fi="source ip" -ti="dest ip" -num=3000
 
+# The data is processed by specifying the preprocessing pipeline ID of the target es
+./es_transfer -fi="source ip" -ti="dest ip" -pid=test1
+
+```
+
+``` json 
+PUT _ingest/pipeline/test1
+{
+  "description": "this is test pipeline",
+  "processors": [
+    {
+      "drop": {
+        "if": " ctx?.openid == null "
+      }
+    },
+    {
+      "set": {
+        "field": "_index",
+        "value": "test_{{openid}}"
+      }
+    }
+  ]
+}
 ```
