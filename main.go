@@ -14,14 +14,14 @@ import (
 )
 
 var (
-	sourceUser     string
-	sourcePwd      string
-	destUser       string
-	destPwd        string
-	sourceIP       string
-	sourcePort     int64
-	destIP         string
-	destPort       int64
+	sourceUser   string
+	sourcePwd    string
+	destUser     string
+	destPwd      string
+	sourceIP     string
+	sourcePort   int64
+	destIP       string
+	destPort     int64
 	indexL       string
 	keepTime     string
 	numberShards float64
@@ -30,6 +30,7 @@ var (
 	bulkNum      int64
 	putNum       int64
 	otype        string
+	pipeID       string
 )
 
 func main() {
@@ -73,14 +74,14 @@ func newCL(ip string, port int64, user, pwd string) (*elastic.Client, error) {
 }
 
 type db struct {
-	sourceCL    *elastic.Client
+	sourceCL  *elastic.Client
 	toCL      *elastic.Client
 	indexNmae string
 	shard     int
 	err       error
 	ctx       context.Context
 	result    chan []*elastic.SearchHit
-	sourceWG    *sync.WaitGroup
+	sourceWG  *sync.WaitGroup
 	toWG      *sync.WaitGroup
 }
 
@@ -197,7 +198,7 @@ func (d *db) slicePostData() {
 
 			for i := range hitData {
 				if num == putNum {
-					_, err := bulkRequest.Add(esRequest...).Refresh("false").Do(d.ctx)
+					_, err := bulkRequest.Add(esRequest...).Pipeline(pipeID).Refresh("false").Do(d.ctx)
 					if err != nil {
 						log.Println(err)
 					}
@@ -209,7 +210,7 @@ func (d *db) slicePostData() {
 			}
 
 			if len(esRequest) > 0 {
-				_, err := bulkRequest.Add(esRequest...).Refresh("false").Do(d.ctx)
+				_, err := bulkRequest.Add(esRequest...).Pipeline(pipeID).Refresh("false").Do(d.ctx)
 				if err != nil {
 					log.Println(err)
 				}
@@ -350,6 +351,7 @@ func (d *db) shards() *db {
 }
 
 func init() {
+	flag.StringVar(&pipeID, "pid", "", "Preprocessing pipeline ID of destination es")
 	flag.Int64Var(&putNum, "pnum", 1000, "Number of single batch submissions(a single shard)")
 	flag.Int64Var(&bulkNum, "bnum", 3000, "The amount of data read in batches(a single shard)")
 	flag.Int64Var(&dataNum, "num", -1, "The amount of data to migrate an index (a single shard)."+
