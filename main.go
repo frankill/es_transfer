@@ -420,4 +420,8 @@ func init() {
 	flag.StringVar(&indexL, "i", "", "index name list a,b . use wildcards *")
 	flag.StringVar(&otype, "o", "index", "Resolution of _id conflict: index coverage; The create skip")
 	flag.Parse()
+
+	if sourceIP == "" || destIP == "" {
+		log.Fatalln("please input sourceIP or destIP")
+	}
 }
