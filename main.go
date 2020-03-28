@@ -336,7 +336,7 @@ func indexList(ch chan string) {
 
 	cl, err := newCL(sourceIP, sourcePort, sourceUser, sourcePwd)
 	if err != nil {
-		log.Println(err)
+		log.Println(sourceIP + " : " + err.Error())
 		return
 	}
 
