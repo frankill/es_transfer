@@ -78,7 +78,7 @@ func newDB() *db {
 
 	c.destCL, c.err = newCL(destIP, destPort, destUser, destPwd)
 	if c.err != nil {
-		c.err = errors.New(sourceIP + " : " + c.err.Error())
+		c.err = errors.New(destIP + " : " + c.err.Error())
 		return c
 	}
 
