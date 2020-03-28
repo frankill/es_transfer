@@ -370,7 +370,7 @@ func smatch(source []string, dest string, b bool) bool {
 		return b
 	}
 	for i := range source {
-		if strings.Index(source[i], "*") > 0 {
+		if strings.Index(source[i], "*") >= 0 {
 			return regexp.MustCompile(strings.ReplaceAll(source[i], "*", ".*")).MatchString(dest)
 		}
 		if source[i] == dest {
