@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -339,33 +340,40 @@ func indexList(ch chan string) {
 		return
 	}
 
-	if indexL != "" {
-		for _, v := range strings.Split(indexL, ",") {
-			ch <- v
-		}
-		return
-	}
-
 	res, err := cl.CatIndices().Do(context.Background())
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
+	if len(res) == 0 {
+		log.Println(errors.New("index len is 0"))
+		return
+	}
+
+	must := strings.Split(indexL, ",")
+	filter := strings.Split(noindex, ",")
+
+	match := func(str string) bool {
+		return smatch(must, str, true) && !smatch(filter, str, false)
+	}
+
 	for k := range res {
-		if !strings.HasPrefix(res[k].Index, ".") &&
-			!sMatch(strings.Split(noindex, ","), res[k].Index) {
+		if !strings.HasPrefix(res[k].Index, ".") && match(res[k].Index) {
 			ch <- res[k].Index
 		}
 	}
 }
 
-func sMatch(data []string, source string) bool {
-	if data == nil {
-		return false
+func smatch(source []string, dest string, b bool) bool {
+	if len(source) == 1 && source[0] == "" {
+		return b
 	}
-	for i := range data {
-		if data[i] == source {
+	for i := range source {
+		if strings.Index(source[i], "*") > 0 {
+			return regexp.MustCompile(strings.ReplaceAll(source[i], "*", ".*")).MatchString(dest)
+		}
+		if source[i] == dest {
 			return true
 		}
 	}
@@ -390,7 +398,7 @@ func (d *db) shards() *db {
 
 func init() {
 	flag.Int64Var(&parallel, "p", 1, "Number of indexes executed in parallel")
-	flag.StringVar(&noindex, "v", "", "Ignored index, cannot be used with - I parameter")
+	flag.StringVar(&noindex, "v", "", "Ignored index list a,b, use wildcards *")
 	flag.StringVar(&pipeID, "pid", "", "Preprocessing pipeline ID of destination es")
 	flag.Int64Var(&putNum, "pnum", 1000, "Number of single batch submissions(a single shard)")
 	flag.Int64Var(&bulkNum, "bnum", 3000, "The amount of data read in batches(a single shard)")
@@ -401,15 +409,15 @@ func init() {
 	flag.BoolVar(&keepMapping, "km", false, "Whether the original index map is not retained")
 	flag.Float64Var(&numberShards, "mul", 1.0, "number shards multiple")
 	flag.StringVar(&keepTime, "kt", "6s", "Read the data retention time of es ")
-	flag.Int64Var(&sourcePort, "fp", 9200, "es port")
-	flag.StringVar(&sourceIP, "fi", "", "es ip ")
-	flag.Int64Var(&destPort, "tp", 9200, "es port")
-	flag.StringVar(&destIP, "ti", "", " es ip")
-	flag.StringVar(&sourceUser, "fu", "", " user name")
-	flag.StringVar(&sourcePwd, "fpwd", "", " pwd")
-	flag.StringVar(&destUser, "tu", "", " user name")
-	flag.StringVar(&destPwd, "tpwd", "", " pwd")
-	flag.StringVar(&indexL, "i", "", "index name list a,b")
+	flag.Int64Var(&sourcePort, "fp", 9200, "source es port")
+	flag.StringVar(&sourceIP, "fi", "", "source es ip ")
+	flag.Int64Var(&destPort, "tp", 9200, "dest es port")
+	flag.StringVar(&destIP, "ti", "", "dest es ip")
+	flag.StringVar(&sourceUser, "fu", "", "source user name")
+	flag.StringVar(&sourcePwd, "fpwd", "", "source pwd")
+	flag.StringVar(&destUser, "tu", "", "dest user name")
+	flag.StringVar(&destPwd, "tpwd", "", "dest pwd")
+	flag.StringVar(&indexL, "i", "", "index name list a,b . use wildcards *")
 	flag.StringVar(&otype, "o", "index", "Resolution of _id conflict: index coverage; The create skip")
 	flag.Parse()
 }
