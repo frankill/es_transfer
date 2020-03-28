@@ -21,6 +21,11 @@
 # The data is processed by specifying the preprocessing pipeline ID of the target es
 ./es_transfer -fi="source ip" -ti="dest ip" -pid=test1
 
+# use wildcards*
+./es_transfer -fi="source ip" -ti="dest ip" -i=test_*
+
+
+
 ```
 
 ``` json 
