@@ -15,6 +15,9 @@
 # Single shard copy 3000 ，No data will be copied if -num is less than - bnum
 ./es_transfer -fi="source ip" -ti="dest ip" -num=3000
 
+# Read 2 indexes in parallel
+./es_transfer -fi="source ip" -ti="dest ip" -p=2
+
 # The data is processed by specifying the preprocessing pipeline ID of the target es
 ./es_transfer -fi="source ip" -ti="dest ip" -pid=test1
 
