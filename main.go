@@ -31,13 +31,42 @@ var (
 	putNum       int64
 	otype        string
 	pipeID       string
+	noindex      string
+	parallel     int64
 )
 
 func main() {
-	NewDB().Do()
+
+	stringCH := make(chan string, 10)
+	go indexList(stringCH)
+
+	var exec sync.WaitGroup
+	for i := 0; i < int(parallel); i++ {
+		exec.Add(1)
+		go func() {
+			do(stringCH)
+			exec.Done()
+		}()
+	}
+	exec.Wait()
+
 }
 
-func NewDB() *db {
+func do(ch chan string) {
+	for {
+		select {
+		case v, ok := <-ch:
+			if !ok {
+				return
+			}
+			log.Println(v, ": begins")
+			newDB().index(v).shards().mapping().channel().data()
+			log.Println(v, ": end")
+		}
+	}
+}
+
+func newDB() *db {
 	c := new(db)
 
 	c.sourceCL, c.err = newCL(sourceIP, sourcePort, sourceUser, sourcePwd)
@@ -60,7 +89,6 @@ func NewDB() *db {
 	c.sourceWG = &fwg
 	c.toWG = &twg
 	return c
-
 }
 
 func newCL(ip string, port int64, user, pwd string) (*elastic.Client, error) {
@@ -76,7 +104,7 @@ func newCL(ip string, port int64, user, pwd string) (*elastic.Client, error) {
 type db struct {
 	sourceCL  *elastic.Client
 	destCL    *elastic.Client
-	indexNmae string
+	indexName string
 	shard     int
 	err       error
 	ctx       context.Context
@@ -98,26 +126,18 @@ func (d *db) index(str string) *db {
 	if d.err != nil {
 		return d
 	}
-	d.indexNmae = str
-	log.Println(d.indexNmae)
+	d.indexName = str
 	return d
 }
 
-func (d *db) Do() {
-	for _, v := range d.indexList() {
-		d.index(v).shards().mapping().channel().data()
-		d.err = nil
-	}
-}
-
 func (d *db) sliceQuery(num int) *elastic.ScrollService {
-	return d.sourceCL.Scroll(d.indexNmae).KeepAlive(keepTime).
+	return d.sourceCL.Scroll(d.indexName).KeepAlive(keepTime).
 		Slice(elastic.NewSliceQuery().Id(num).Max(d.shard)).
 		Size(int(bulkNum))
 }
 
 func (d *db) query() *elastic.ScrollService {
-	return d.sourceCL.Scroll(d.indexNmae).
+	return d.sourceCL.Scroll(d.indexName).
 		KeepAlive(keepTime).Size(int(bulkNum))
 }
 
@@ -265,7 +285,7 @@ func (d *db) createIndex() {
 	tmp := make(map[string]interface{})
 	tmp["settings"] = body
 
-	_, err = d.destCL.CreateIndex(d.indexNmae).BodyJson(tmp).Do(d.ctx)
+	_, err = d.destCL.CreateIndex(d.indexName).BodyJson(tmp).Do(d.ctx)
 
 	if err != nil {
 		d.err = err
@@ -281,12 +301,12 @@ func (d *db) mapping() *db {
 		return d
 	}
 
-	mapping, err := d.sourceCL.GetMapping().Index(d.indexNmae).Do(d.ctx)
+	mapping, err := d.sourceCL.GetMapping().Index(d.indexName).Do(d.ctx)
 	if err != nil {
 		d.err = err
 		return d
 	}
-	ok, err := d.destCL.IndexExists(d.indexNmae).Do(d.ctx)
+	ok, err := d.destCL.IndexExists(d.indexName).Do(d.ctx)
 	if err != nil {
 		d.err = err
 		return d
@@ -300,8 +320,8 @@ func (d *db) mapping() *db {
 		return d
 	}
 
-	_, err = d.destCL.PutMapping().Index(d.indexNmae).
-		BodyJson(mapping[d.indexNmae].(map[string]interface{})["mappings"].(map[string]interface{})).Do(d.ctx)
+	_, err = d.destCL.PutMapping().Index(d.indexName).
+		BodyJson(mapping[d.indexName].(map[string]interface{})["mappings"].(map[string]interface{})).Do(d.ctx)
 	if err != nil {
 		d.err = err
 		return d
@@ -309,41 +329,59 @@ func (d *db) mapping() *db {
 	return d
 }
 
-func (d *db) indexList() []string {
+func indexList(ch chan string) {
 
-	if d.err != nil {
-		log.Println(d.err)
-		return nil
+	defer close(ch)
+
+	cl, err := newCL(sourceIP, sourcePort, sourceUser, sourcePwd)
+	if err != nil {
+		log.Println(err)
+		return
 	}
 
 	if indexL != "" {
-		return strings.Split(indexL, ",")
+		for _, v := range strings.Split(indexL, ",") {
+			ch <- v
+		}
+		return
 	}
 
-	res, err := d.sourceCL.CatIndices().Do(d.ctx)
+	res, err := cl.CatIndices().Do(context.Background())
 	if err != nil {
-		d.err = err
-		return nil
+		log.Println(err)
+		return
 	}
-	dd := make([]string, 0, len(res))
+
 	for k := range res {
-		if !strings.HasPrefix(res[k].Index, ".") {
-			dd = append(dd, res[k].Index)
+		if !strings.HasPrefix(res[k].Index, ".") &&
+			!sMatch(strings.Split(noindex, ","), res[k].Index) {
+			ch <- res[k].Index
 		}
 	}
-	return dd
+}
+
+func sMatch(data []string, source string) bool {
+	if data == nil {
+		return false
+	}
+	for i := range data {
+		if data[i] == source {
+			return true
+		}
+	}
+	return false
 }
 
 func (d *db) shards() *db {
 	if d.err != nil {
 		return d
 	}
-	slice, err := d.sourceCL.IndexGetSettings(d.indexNmae).Do(d.ctx)
+	slice, err := d.sourceCL.IndexGetSettings(d.indexName).Do(d.ctx)
 	if err != nil {
 		d.err = err
 		return d
 	}
-	d.shard, err = strconv.Atoi(slice[d.indexNmae].Settings["index"].(map[string]interface{})["number_of_shards"].(string))
+	d.shard, err = strconv.Atoi(slice[d.indexName].Settings["index"].(map[string]interface{})["number_of_shards"].(string))
 	if err != nil {
 		d.err = err
 	}
@@ -351,6 +389,8 @@ func (d *db) shards() *db {
 }
 
 func init() {
+	flag.Int64Var(&parallel, "p", 1, "Number of indexes executed in parallel")
+	flag.StringVar(&noindex, "v", "", "Ignored index, cannot be used with - I parameter")
 	flag.StringVar(&pipeID, "pid", "", "Preprocessing pipeline ID of destination es")
 	flag.Int64Var(&putNum, "pnum", 1000, "Number of single batch submissions(a single shard)")
 	flag.Int64Var(&bulkNum, "bnum", 3000, "The amount of data read in batches(a single shard)")
