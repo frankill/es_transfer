@@ -22,7 +22,7 @@
 ./es_transfer -fi="source ip" -ti="dest ip" -pid=test1
 
 # use wildcards*
-./es_transfer -fi="source ip" -ti="dest ip" -i=test_*
+./es_transfer -fi="source ip" -ti="dest ip" -i=test_* -v=new_*
 
 
 
