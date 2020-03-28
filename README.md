@@ -1,5 +1,9 @@
 # es_transfer
+
 ```sh
+
+go build -ldflags "-s -w" -o es_transfer .
+
 # Copy all source data + map to destination
 ./es_transfer -fi="source ip" -ti="dest ip" 
 
